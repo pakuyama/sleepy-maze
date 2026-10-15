@@ -155,11 +155,11 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
 <main class="game">
   <header>
     <h1>잠꼬대 자물쇠 미로</h1>
-    <p>졸린 잠꾸러기의 잠꼬대를 듣고 자물쇠를 열어 꿈 조각 5개를 모으면 새벽 문이 열려요. 잠긴 방은 7개라 두 곳은 건너뛰어도 돼요.</p>
+    <p>졸린 잠꾸러기의 잠꼬대를 듣고 자물쇠를 열어 잠긴 방 7곳 중 어딘가에 숨은 꿈 조각 3개를 찾으면 새벽 문이 열려요. 조각 위치는 게임마다 바뀌어요.</p>
   </header>
 
   <div class="status" aria-live="polite">
-    <span class="pieces" id="pieces">✨ 꿈 조각 0/5</span>
+    <span class="pieces" id="pieces">✨ 꿈 조각 0/3</span>
     <span class="hp" id="hp" aria-label="체력">체력 ♥♥♥</span>
   </div>
 
@@ -224,7 +224,17 @@ const DOORS = {
   "꿈 다락": { question: "셋 곱하기 셋", answer: 9 },
   "졸음 창고": { question: "여덟 더하기 일곱", answer: 15 },
 };
-const GOAL = 5, MAX_HP = 3, MIN_ANSWER = 0, MAX_ANSWER = 99;
+const GOAL = 3, MAX_HP = 3, MIN_ANSWER = 0, MAX_ANSWER = 99;
+
+// 잠긴 방 중 GOAL개를 무작위로 골라 꿈 조각을 숨김 (게임마다 달라짐)
+function hidePieces() {
+  const rooms = Object.keys(DOORS);
+  for (let i = rooms.length - 1; i > 0; i--) {          // 카드 섞듯이 순서를 섞음
+    const j = Math.floor(Math.random() * (i + 1));
+    [rooms[i], rooms[j]] = [rooms[j], rooms[i]];
+  }
+  return new Set(rooms.slice(0, GOAL));
+}
 const SLEEP_STATES = [
   { text: "잠꾸러기: 쿨쿨… zzZ (깊이 잠듦)" },
   { text: "잠꾸러기: 뒤척뒤척… zZ (반쯤 깸)" },
@@ -242,6 +252,8 @@ function newGame() {
     locked: Object.fromEntries(ROOMS.map(r => [r, r !== START])),   // 시작 방 빼고 모두 잠김
     door: null,                 // 지금 서 있는 문 (잠긴 방 이름)
     pieces: 0,
+    pieceRooms: hidePieces(),   // 꿈 조각이 숨어 있는 방 3개
+    emptyRooms: new Set(),      // 열어 봤는데 조각이 없던 방 (지도에 "빈 방" 표시)
     hp: MAX_HP,
     wrongAt: Object.fromEntries(Object.keys(DOORS).map(r => [r, 0])),
     blocked: 0,
@@ -286,6 +298,7 @@ function render() {
     else if (room === state.door) { b.classList.add("door"); sub = "문 앞"; }
     else if (state.locked[room]) { b.classList.add("locked"); sub = "잠김"; }
     else if (room === EXIT) { b.classList.add("exit-open"); sub = "열림!"; }
+    else if (state.emptyRooms.has(room)) sub = "빈 방";
     const label = room === state.here ? "★ " + room : room;
     b.innerHTML = label + (sub ? `<small>${sub}</small>` : "");
   }
@@ -403,12 +416,16 @@ function tryOpen() {
   if (number === DOORS[room].answer) {
     state.locked[room] = false;
     state.here = room; state.door = null;
-    if (state.pieces >= GOAL) {               // 이미 다 모았으면 조각을 더 주지 않음 (최대 GOAL개)
+    if (!state.pieceRooms.has(room)) {        // 꿈 조각이 없는 방
+      state.emptyRooms.add(room);
       showHint(null);
-      setMsg(`딸깍! 문은 열렸지만 꿈 조각은 이미 다 모았어요. ${EXIT}으로 가세요.`);
+      setMsg(state.pieces >= GOAL
+        ? `딸깍! 문은 열렸지만 꿈 조각은 이미 다 찾았어요. ${EXIT}으로 가세요.`
+        : `딸깍! 문은 열렸지만… 이 방엔 꿈 조각이 없어요. 다른 방을 찾아봐요. (남은 조각 ${GOAL - state.pieces}개)`);
       render();
       return;
     }
+    state.pieceRooms.delete(room);            // 같은 조각을 두 번 줍지 않게
     state.pieces++;
     const last = state.pieces >= GOAL;
     if (last) state.locked[EXIT] = false;
