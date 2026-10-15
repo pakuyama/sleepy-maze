@@ -300,10 +300,13 @@ function showHint(room) {
   const hint = $("hint"), wake = $("wake");
   if (!room) { hint.textContent = ""; wake.textContent = ""; hint.className = "hint"; return; }
   const q = DOORS[room].question, lv = awakeLevel(room);
+  // 낱말 순서는 절대 바꾸지 않음: "아홉 빼기 넷"이 "넷 빼기 아홉"(음수)으로 읽히지 않게
+  const words = q.split(" ");
+  const flip = w => [...w].reverse().join("");
   let said;
-  if (lv === 0) said = [...q].reverse().join("") + "...";          // 글자까지 거꾸로
-  else if (lv === 1) said = q.split(" ").reverse().join(" ") + "..."; // 낱말 순서만 거꾸로
-  else said = q + " = ?";                                           // 또렷한 문장
+  if (lv === 0) said = `${flip(words[0])}… 쿨쿨… ${flip(words[2])}...`;            // 계산 말은 코 고는 소리에 묻힘
+  else if (lv === 1) said = words.map((w, i) => i === 1 ? flip(w) : w).join(" ") + "..."; // 숫자는 또렷, 계산 말만 뒤섞임
+  else said = q + " = ?";                                                         // 또렷한 문장
   wake.textContent = SLEEP_STATES[lv].text;
   hint.textContent = `잠꼬대: “${said}”`;
   hint.className = "hint lv" + lv;
@@ -400,6 +403,12 @@ function tryOpen() {
   if (number === DOORS[room].answer) {
     state.locked[room] = false;
     state.here = room; state.door = null;
+    if (state.pieces >= GOAL) {               // 이미 다 모았으면 조각을 더 주지 않음 (최대 GOAL개)
+      showHint(null);
+      setMsg(`딸깍! 문은 열렸지만 꿈 조각은 이미 다 모았어요. ${EXIT}으로 가세요.`);
+      render();
+      return;
+    }
     state.pieces++;
     const last = state.pieces >= GOAL;
     if (last) state.locked[EXIT] = false;
